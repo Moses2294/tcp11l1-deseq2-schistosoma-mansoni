@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite the repository as follows."
+title: "tcp11l1-deseq2-schistosoma-mansoni"
+type: software
+authors: "Leonel Javeres Mbah Ntepe1*", "Roussel Moise Wokam Njomgang 1*", "Leonel Meyo Kamguia1,2*", "Martin Gael Oyono1", "Bernard Marie Zambo Bitye1", "Katie Lennard3", "Mireille Kameni1", "Alim Oumarou4", "Sandrine Oyegue2", "Louis-Albert Tchuem Tchuenté4,5", "Frank Brombacher6,7,8", "Thomas Spangenberg9", "Claudia Demarta-Gatsi9" and "Justin Komguep Nono1,10#"
+repository-code: "https://github.com/YOUR-USERNAME/tcp11l1-deseq2-schistosoma-mansoni"
+license: "2026 Unit of Immunobiology and Helminth infections Laboratory (IBHI Lab)"
+version: "v1.0.0"
+date-released: 2026-04-14
+abstract: >
+  R/DESeq2 workflow for differential expression analysis of the RNA-seq discovery
+  cohort from a Schistosoma mansoni biomarker study in school-aged children
+  from rural Cameroon, including the Sm_Hf versus n.c comparison linked to the
+  TCP11L1 transcriptomic analysis.
+keywords:
+  - schistosomiasis
+  - Schistosoma mansoni
+  - RNA-seq
+  - DESeq2
+  - transcriptomics
+  - TCP11L1
+  - biomarker
