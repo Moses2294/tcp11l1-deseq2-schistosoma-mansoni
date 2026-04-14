@@ -20,7 +20,7 @@ According to the study design, RNA-seq libraries were generated from four epidem
 
 The present script focuses on the comparison:
 
-- **Sm_Hf vs n.c**
+- **Sm_Hf vs n.c** (KK+US+ vs KK-US-)
 
 ## What the script does
 
