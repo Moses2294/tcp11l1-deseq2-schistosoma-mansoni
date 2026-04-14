@@ -25,7 +25,7 @@ The present script focuses on the comparison:
 ## What the script does
 
 The DESeq2 workflow currently:
-1. Imports a gene-count matrix (`DEG_R.csv`)
+1. Imports a gene-count matrix (`data_DEG_R.csv`)
 2. Filters out very low-count genes (`rowSums > 10`)
 3. Creates sample metadata with four conditions
 4. Builds a `DESeqDataSet`
@@ -63,7 +63,7 @@ suppressPackageStartupMessages({
 # -----------------------------
 # 1. User-defined input/output
 # -----------------------------
-input_counts <- "data/DEG_R.csv"
+input_counts <- "data_DEG_R.csv"
 output_dir   <- "results"
 
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
