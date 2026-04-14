@@ -46,12 +46,14 @@ The DESeq2 workflow currently:
 The main analysis script is:
 
 ```text
+
+
 #!/usr/bin/env Rscript
 
 # ============================================================
 # DESeq2 differential expression analysis
-# Contrast: Sm_Hf vs n.c
-# Study context: Schistosoma mansoni RNA-seq discovery cohort
+# Adapted to the uploaded file: data_DEG_R.csv
+# Main contrast: Sm_Hf vs n.c
 # ============================================================
 
 suppressPackageStartupMessages({
@@ -60,114 +62,120 @@ suppressPackageStartupMessages({
   library(pheatmap)
 })
 
-# -----------------------------
-# 1. User-defined input/output
-# -----------------------------
+# ------------------------------------------------------------
+# 1. Input / output paths
+# ------------------------------------------------------------
 input_counts <- "data_DEG_R.csv"
 output_dir   <- "results"
 
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-# -----------------------------
+# ------------------------------------------------------------
 # 2. Read count matrix
-# -----------------------------
+# ------------------------------------------------------------
 if (!file.exists(input_counts)) {
   stop("Input file not found: ", input_counts)
 }
 
+# Keep default check.names=TRUE so duplicate group names become:
+# Sm_Hf, Sm_Hf.1, ..., Sm.1, ..., n.c.9
 counts <- read.csv(
   input_counts,
   header = TRUE,
   row.names = 1,
-  check.names = FALSE
+  stringsAsFactors = FALSE
 )
+
+counts[is.na(counts)] <- 0
+
+counts <- as.matrix(counts)
+mode(counts) <- "numeric"
+
+if (anyNA(counts)) {
+  stop("NA values are still present after replacement. Please inspect the input CSV.")
+}
 
 # Convert to numeric matrix
 counts <- as.matrix(counts)
 mode(counts) <- "numeric"
 
-if (any(is.na(counts))) {
-  stop("Count matrix contains NA values. Please check the input file.")
+if (anyNA(counts)) {
+  stop("The count matrix contains NA values. Please inspect the input CSV.")
 }
 
-if (ncol(counts) == 0 || nrow(counts) == 0) {
-  stop("Count matrix is empty.")
+if (nrow(counts) == 0 || ncol(counts) == 0) {
+  stop("The count matrix is empty.")
 }
 
-# ------------------------------------------
-# 3. Define sample groups (original ordering)
-# ------------------------------------------
-# Original script assumes 40 samples ordered as:
-# 10 Sm_Hf, 10 Sm, 10 Hf, 10 n.c
+# ------------------------------------------------------------
+# 3. Derive sample groups from real column names
+# ------------------------------------------------------------
+sample_names <- colnames(counts)
 
-expected_n <- 40
-if (ncol(counts) != expected_n) {
+# Remove suffixes like .1, .2, .3 to recover group labels
+condition_raw <- sub("\\.[0-9]+$", "", sample_names)
+
+valid_groups <- c("Sm_Hf", "Sm", "Hf", "n.c")
+
+if (!all(condition_raw %in% valid_groups)) {
   stop(
-    "This script expects ", expected_n,
-    " columns/samples in the following order:\n",
-    "10 Sm_Hf, 10 Sm, 10 Hf, 10 n.c\n",
-    "Detected columns: ", ncol(counts), "\n",
-    "Please adapt the condition vector if your sample order differs."
+    "Unexpected group names detected in column names.\n",
+    "Detected groups: ", paste(sort(unique(condition_raw)), collapse = ", "), "\n",
+    "Expected groups: ", paste(valid_groups, collapse = ", ")
   )
 }
 
-condition <- factor(
-  c(
-    rep("Sm_Hf", 10),
-    rep("Sm",    10),
-    rep("Hf",    10),
-    rep("n.c",   10)
-  ),
-  levels = c("n.c", "Hf", "Sm", "Sm_Hf")
-)
+condition <- factor(condition_raw, levels = c("n.c", "Hf", "Sm", "Sm_Hf"))
 
 coldata <- data.frame(
-  row.names = colnames(counts),
+  row.names = sample_names,
   condition = condition
 )
 
-# -------------------------------------
+# Print sample distribution
+cat("Sample distribution by group:\n")
+print(table(coldata$condition))
+
+# ------------------------------------------------------------
 # 4. Filter low-count genes
-# -------------------------------------
-# Faithful to original script: keep genes with rowSums > 10
-counts_filtered <- counts[rowSums(counts) > 10, ]
+# ------------------------------------------------------------
+# Same rule as in the original script
+counts_filtered <- counts[rowSums(counts) > 10, , drop = FALSE]
 
 if (nrow(counts_filtered) == 0) {
-  stop("No genes remaining after filtering (rowSums > 10).")
+  stop("No genes remaining after filtering with rowSums > 10.")
 }
 
-# -------------------------------------
-# 5. Build DESeq2 dataset and run model
-# -------------------------------------
+# ------------------------------------------------------------
+# 5. Build DESeq2 object
+# ------------------------------------------------------------
 dds <- DESeqDataSetFromMatrix(
-  countData = counts_filtered,
+  countData = round(counts_filtered),
   colData   = coldata,
   design    = ~ condition
 )
 
 dds <- DESeq(dds)
 
-# Variance stabilizing transformation for exploratory plots
+# Variance stabilizing transformation for PCA/heatmap
 vsd <- vst(dds, blind = FALSE)
 
-# -------------------------------------
-# 6. Main contrast: Sm_Hf vs n.c
-# -------------------------------------
+# ------------------------------------------------------------
+# 6. Differential expression: Sm_Hf vs n.c
+# ------------------------------------------------------------
 res <- results(dds, contrast = c("condition", "Sm_Hf", "n.c"))
 res <- res[order(res$padj), ]
 
 res_df <- as.data.frame(res)
-res_df$gene <- rownames(res_df)
-res_df <- res_df[, c("gene", setdiff(colnames(res_df), "gene"))]
+res_df$GeneID <- rownames(res_df)
+res_df <- res_df[, c("GeneID", setdiff(colnames(res_df), "GeneID"))]
 
 sig_df <- subset(res_df, !is.na(padj) & padj < 0.05)
+sig_lfc_df <- subset(res_df, !is.na(padj) & padj < 0.05 & abs(log2FoldChange) >= 1)
 
-# Optional stricter subset with effect size threshold
-sig_lfc_df <- subset(sig_df, abs(log2FoldChange) >= 1)
-
-# -------------------------------------
-# 7. Save result tables
-# -------------------------------------
+# ------------------------------------------------------------
+# 7. Save results tables
+# ------------------------------------------------------------
 write.csv(
   res_df,
   file = file.path(output_dir, "deseq2_full_results_sm_hf_vs_nc.csv"),
@@ -186,9 +194,9 @@ write.csv(
   row.names = FALSE
 )
 
-# -------------------------------------
+# ------------------------------------------------------------
 # 8. PCA plot
-# -------------------------------------
+# ------------------------------------------------------------
 pca_data <- plotPCA(vsd, intgroup = "condition", returnData = TRUE)
 percent_var <- round(100 * attr(pca_data, "percentVar"))
 
@@ -207,9 +215,9 @@ ggsave(
   dpi = 300
 )
 
-# -------------------------------------
+# ------------------------------------------------------------
 # 9. Dispersion plot
-# -------------------------------------
+# ------------------------------------------------------------
 png(
   filename = file.path(output_dir, "dispersion_estimates.png"),
   width = 1800,
@@ -219,9 +227,9 @@ png(
 plotDispEsts(dds)
 dev.off()
 
-# -------------------------------------
+# ------------------------------------------------------------
 # 10. MA plot
-# -------------------------------------
+# ------------------------------------------------------------
 png(
   filename = file.path(output_dir, "ma_plot_sm_hf_vs_nc.png"),
   width = 1800,
@@ -231,24 +239,26 @@ png(
 plotMA(res, ylim = c(-5, 5), main = "MA plot: Sm_Hf vs n.c")
 dev.off()
 
-# -------------------------------------
+# ------------------------------------------------------------
 # 11. Volcano plot
-# -------------------------------------
+# ------------------------------------------------------------
 volcano_df <- res_df
 volcano_df$negLog10P <- -log10(volcano_df$pvalue)
+volcano_df$negLog10P[!is.finite(volcano_df$negLog10P)] <- NA
+
 volcano_df$category <- "Not significant"
-volcano_df$category[!is.na(volcano_df$padj) & volcano_df$padj < 0.01] <- "padj < 0.01"
+volcano_df$category[!is.na(volcano_df$padj) & volcano_df$padj < 0.05] <- "padj < 0.05"
 volcano_df$category[!is.na(volcano_df$padj) &
-                      volcano_df$padj < 0.01 &
-                      abs(volcano_df$log2FoldChange) > 2] <- "padj < 0.01 & |log2FC| > 2"
+                      volcano_df$padj < 0.05 &
+                      abs(volcano_df$log2FoldChange) > 1.5] <- "padj < 0.05 & |log2FC| > 1.5"
 
 p_volcano <- ggplot(volcano_df, aes(x = log2FoldChange, y = negLog10P)) +
-  geom_point(aes(color = category), alpha = 0.7, size = 1.8) +
+  geom_point(aes(color = category), alpha = 0.7, size = 1.8, na.rm = TRUE) +
   scale_color_manual(
     values = c(
       "Not significant" = "grey70",
-      "padj < 0.01" = "blue",
-      "padj < 0.01 & |log2FC| > 2" = "red"
+      "padj < 0.05" = "blue",
+      "padj < 0.05 & |log2FC| > 1.5" = "red"
     )
   ) +
   labs(
@@ -267,14 +277,13 @@ ggsave(
   dpi = 300
 )
 
-# -------------------------------------
+# ------------------------------------------------------------
 # 12. Heatmap
-# -------------------------------------
-# Use top significant genes if available; otherwise top variable genes
+# ------------------------------------------------------------
 vsd_mat <- assay(vsd)
 
 if (nrow(sig_df) >= 2) {
-  top_genes <- head(sig_df$gene, 50)
+  top_genes <- head(sig_df$GeneID, 50)
   top_genes <- top_genes[top_genes %in% rownames(vsd_mat)]
   heatmap_mat <- vsd_mat[top_genes, , drop = FALSE]
 } else {
@@ -283,7 +292,6 @@ if (nrow(sig_df) >= 2) {
   heatmap_mat <- vsd_mat[top_genes, , drop = FALSE]
 }
 
-# Row scaling for visualization
 heatmap_mat <- t(scale(t(heatmap_mat)))
 heatmap_mat[is.na(heatmap_mat)] <- 0
 
@@ -308,13 +316,13 @@ pheatmap(
 )
 dev.off()
 
-# -------------------------------------
+# ------------------------------------------------------------
 # 13. Save normalized counts
-# -------------------------------------
+# ------------------------------------------------------------
 norm_counts <- counts(dds, normalized = TRUE)
 norm_counts_df <- as.data.frame(norm_counts)
-norm_counts_df$gene <- rownames(norm_counts_df)
-norm_counts_df <- norm_counts_df[, c("gene", setdiff(colnames(norm_counts_df), "gene"))]
+norm_counts_df$GeneID <- rownames(norm_counts_df)
+norm_counts_df <- norm_counts_df[, c("GeneID", setdiff(colnames(norm_counts_df), "GeneID"))]
 
 write.csv(
   norm_counts_df,
@@ -322,22 +330,39 @@ write.csv(
   row.names = FALSE
 )
 
-# -------------------------------------
-# 14. Save session information
-# -------------------------------------
+# ------------------------------------------------------------
+# 14. Save transformed matrix used in PCA / heatmap
+# ------------------------------------------------------------
+vsd_df <- as.data.frame(assay(vsd))
+vsd_df$GeneID <- rownames(vsd_df)
+vsd_df <- vsd_df[, c("GeneID", setdiff(colnames(vsd_df), "GeneID"))]
+
+write.csv(
+  vsd_df,
+  file = file.path(output_dir, "vst_transformed_counts.csv"),
+  row.names = FALSE
+)
+
+# ------------------------------------------------------------
+# 15. Save session info
+# ------------------------------------------------------------
 writeLines(
   capture.output(sessionInfo()),
   con = file.path(output_dir, "sessionInfo.txt")
 )
 
-# -------------------------------------
-# 15. Console summary
-# -------------------------------------
-cat("DESeq2 analysis completed successfully.\n")
+# ------------------------------------------------------------
+# 16. Console summary
+# ------------------------------------------------------------
+cat("\nDESeq2 analysis completed successfully.\n")
 cat("Input file: ", input_counts, "\n", sep = "")
 cat("Genes before filtering: ", nrow(counts), "\n", sep = "")
 cat("Genes after filtering: ", nrow(counts_filtered), "\n", sep = "")
+cat("Samples: ", ncol(counts), "\n", sep = "")
+cat("Contrast: Sm_Hf vs n.c\n")
 cat("Total DE results: ", nrow(res_df), "\n", sep = "")
 cat("Significant genes (padj < 0.05): ", nrow(sig_df), "\n", sep = "")
 cat("Significant genes (padj < 0.05 and |log2FC| >= 1): ", nrow(sig_lfc_df), "\n", sep = "")
 cat("Results written to: ", output_dir, "\n", sep = "")
+
+
