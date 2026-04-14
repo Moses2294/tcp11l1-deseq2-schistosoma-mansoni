@@ -13,10 +13,10 @@ This repository contains the R/DESeq2 code used for differential expression anal
 This repository currently contains the DESeq2-based downstream analysis used in the RNA-seq discovery phase of the study. The broader study investigated host blood transcriptomic changes associated with *Schistosoma mansoni* infection in school-aged children from a rural endemic area in Cameroon.
 
 According to the study design, RNA-seq libraries were generated from four epidemiological groups:
-- `Sm_Hf`
-- `Sm`
-- `Hf`
-- `n.c`
+- `Sm_Hf` (KK+US+)
+- `Sm` (KK+US-)
+- `Hf` (KK-US+)
+- `n.c` (KK-US-)
 
 The present script focuses on the comparison:
 
